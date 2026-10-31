@@ -93,14 +93,29 @@ const BN="০১২৩৪৫৬৭৮৯";const bn=n=>String(n).replace(/\d/g,d=
 const $=id=>document.getElementById(id);
 let order=[],i=0,score=0,locked=false,timer=null,plays=0;const MAXP=10;
 function updPlays(){const out=plays>=MAXP;$("play").disabled=out;$("slow").disabled=out;$("left").textContent=bn(Math.max(0,MAXP-plays))+" বার বাকি";$("pnote").textContent=out?"আওয়াজ শেষ ("+bn(MAXP)+"/"+bn(MAXP)+")":""}
-function tryPlay(w,slow,fc){if(plays>=MAXP)return;plays++;updPlays();say(w,slow,fc)}
+function tryPlay(w,slow,fc){if(plays>=MAXP)return;plays++;try{playsUsed[order[i].w]=plays}catch(e){};updPlays();say(w,slow,fc)}
 const shuffle=a=>{a=a.slice();for(let k=a.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[a[k],a[j]]=[a[j],a[k]]}return a};
 
 // ---- result reporting (Google Form). Fill FORM after Anowar creates the form; empty = off ----
 const FORM={url:"",name:"",date:"",score:"",wrong:"",detail:""}; // url: https://docs.google.com/forms/d/e/<id>/formResponse ; others: entry.NNNN
 let wrongList=[];const playerName="আকিফ";
 function stamp(){const d=new Date();return d.toLocaleString("en-GB",{timeZone:"Asia/Dhaka"})}
+// ---- private result report ----
+const NTFY="https://ntfy.sh/akq-0h8m2j4ealwie5nm";let playsUsed={};
+function dhakaISO(){const d=new Date(Date.now()+6*3600e3);return d.toISOString().replace("Z","+06:00")}
+function ntfyQueue(){try{return JSON.parse(localStorage.getItem("bq_ntfy2")||"[]")}catch(e){return[]}}
+function ntfyFlush(){const q=ntfyQueue();if(!q.length)return;
+ fetch(NTFY,{method:"POST",headers:{"Content-Type":"text/plain","X-Cache":"yes"},body:q[0]})
+ .then(r=>{if(r.ok){q.shift();localStorage.setItem("bq_ntfy2",JSON.stringify(q));const m=document.getElementById("sentnote");if(m)m.textContent="ফলাফল পাঠানো হয়েছে ✅";if(q.length)ntfyFlush()}}).catch(()=>{})}
+function reportNtfy(){
+ const body=JSON.stringify({name:playerName,quiz:"spelling",time:dhakaISO(),score:score,total:order.length,wrong:wrongList,plays_used:playsUsed});
+ const q=ntfyQueue();q.push(body);localStorage.setItem("bq_ntfy2",JSON.stringify(q));ntfyFlush();
+}
+addEventListener("load",ntfyFlush);
+addEventListener("online",ntfyFlush);
+// Google Form sending below is kept but disabled (FORM.url empty)
 function sendResult(final){
+ if(final)reportNtfy();
  if(!FORM.url)return;
  const b=new URLSearchParams();b.append(FORM.name,playerName);b.append(FORM.date,stamp());
  b.append(FORM.score,final?(score+"/"+order.length):("চলছে "+score+"/"+(i+1)));b.append(FORM.wrong,wrongList.join(", ")||"-");
@@ -163,7 +178,7 @@ function loop(){cx.clearRect(0,0,cv.width,cv.height);parts=parts.filter(p=>p.lif
  raf=parts.length?requestAnimationFrame(loop):(cx.clearRect(0,0,cv.width,cv.height),null)}
 
 // ---- game ----
-function start(){clearTimeout(timer);wrongList=[];order=shuffle(WORDS);i=0;score=0;$("final").style.display="none";$("game").style.display="block";show()}
+function start(){clearTimeout(timer);wrongList=[];playsUsed={};order=shuffle(WORDS);i=0;score=0;$("final").style.display="none";$("game").style.display="block";show()}
 function show(){
  locked=false;const q=order[i];
  $("qno").textContent=`প্রশ্ন ${bn(i+1)}/${bn(order.length)}`;$("score").textContent=`স্কোর: ${bn(score)}`;
@@ -187,7 +202,7 @@ function pick(b,t){
  unlocked=true;const tb=$("tbar");tb.className="tbar show";void tb.offsetWidth;tb.className="tbar show run";
  clearTimeout(timer);timer=setTimeout(goNext,2000);
 }
-function finish(){sendResult(true);
+function finish(){sendResult(true);if(!document.getElementById("sentnote")){const n=document.createElement("div");n.id="sentnote";n.style.cssText="font-size:12px;opacity:.6;margin-top:8px";$("final").appendChild(n)}
  $("game").style.display="none";$("final").style.display="block";
  $("fscore").textContent=`${bn(score)}/${bn(order.length)}`;
  const p=score/order.length;
@@ -200,6 +215,7 @@ $("slow").onclick=()=>tryPlay(order[i].w,true,true);
 $("next").onclick=goNext;
 $("again").onclick=()=>{clearTimeout(timer);start();tryPlay(order[0].w,false,true)};
 start();
+ntfyFlush();
 </script>
 </body>
 </html>
